@@ -1,0 +1,127 @@
+Guia de Estudo: Virtual Threads e Concorrência em Java
+
+1. O Ponto de Partida (Thread Main)
+Toda aplicação Java começa com a Thread Main criada pela JVM. Ela é uma Platform Thread (tradicional) e pode criar outras threads.
+
+***
+
+2. Platform Thread (Normal) vs Virtual Thread
+
+- Alocacao: Kernel do SO (1MB por thread) vs Heap da JVM (~200 bytes)
+- Paralelismo: Sim (usa multiplos cores) vs Sim (usa multiplos cores)
+- Bloqueio em I/O: TRAVA a thread (ociosa) vs DESMONTA (libera carrier)
+- Limite pratico: ~5.000 threads vs ~1.000.000+ threads
+- Criacao: Chamada de sistema vs Objeto no heap
+
+***
+
+3. O Problema da Platform Thread
+Cada thread normal = 1MB de memoria alocada no SO. Mesmo bloqueada esperando I/O, continua ocupando 1MB.
+
+10.000 threads normais = 10GB de RAM = OutOfMemoryError.
+
+***
+
+4. Como a Virtual Thread Resolve (Monta/Desmonta)
+Uma virtual thread vive no heap como uma Continuation (~200 bytes). Quando encontra I/O (banco, API, rede), DESMONTA da carrier (platform thread real) e libera o core. Quando o I/O termina, REMONTA em QUALQUER carrier disponivel.
+
+Uma carrier (platform thread real) pode executar milhares de virtual threads.
+
+***
+
+5. IO Bound vs CPU Bound
+
+IO Bound: programa passa a maior parte do tempo esperando operações de entrada/saída (banco, rede, disco, API externa). O gargalo é a velocidade do I/O, não da CPU.
+
+CPU Bound: programa passa a maior parte do tempo executando cálculos no processador. O gargalo é a capacidade de processamento da CPU.
+
+IO Bound vs CPU Bound
+
+- Gargalo: Espera I/O (disco/rede/banco) vs Processamento (CPU)
+- Tempo gasto: 95% esperando, 5% CPU vs 95% CPU, 5% esperando
+- Exemplo: CRUD, pagamentos, API vs Video render, criptografia, IA
+- Otimizacao: Mais threads paralelas vs Mais cores/clock mais rapido
+- Virtual thread: OTIMA (desmonta na espera) vs RUIM (nao resolve)
+- Thread normal: Limitada (trava na espera) vs OK (usa multiplos cores)
+
+***
+
+6. Quando Usar
+Bom para I/O-bound:
+
+Banco de dados (JDBC, JPA, MongoDB)
+
+API externa (HTTP, GetNet, pagamentos)
+
+Leitura/escrita de arquivo
+
+Schedulers com espera (seu caso de 1h10 para cancelar pedidos)
+
+Ruim para CPU-bound:
+
+Calculos pesados (fibonacci, criptografia)
+
+Processamento de imagem/video
+
+Qualquer coisa que use CPU por muito tempo sem I/O
+
+***
+
+7. Pinning
+Bloco synchronized faz a virtual thread PINAR (nao desmonta). Use ReentrantLock no lugar.
+
+***
+
+Errado:
+synchronized(lock) {
+Thread.sleep(1000); // Pinning! Carrier fica presa
+}
+
+Certo:
+lock.lock();
+try {
+Thread.sleep(1000); // Desmonta normalmente
+} finally {
+lock.unlock();
+}
+
+8. Memoria: Onde Cada Coisa Fica
+Thread normal (platform): Stack no kernel do SO (1MB)
+
+Virtual thread: Continuation no Heap (~200 bytes)
+
+Carrier (thread real que executa virtual thread): Stack no kernel (1MB), mas uma carrier serve milhares de virtual threads
+
+***
+
+9. Codigo Pratico
+Criar uma virtual thread:
+Thread.startVirtualThread(() -> {
+fazerAlgo();
+});
+
+ExecutorService para multiplas:
+ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
+executor.submit(() -> fazerAlgo());
+
+***
+
+10. Erros Comuns
+Achar que virtual thread roda "uma por vez" - Errado! Elas tambem rodam em paralelo em multiplos carriers.
+
+Achar que virtual thread e bom pra CPU - Errado! So e bom para I/O.
+
+Usar synchronized em codigo que espera - Causa pinning, perde o beneficio.
+
+ThreadLocal em virtual thread - Funciona mas e mais caro, evite.
+
+***
+
+11. Regras de Ouro
+Use virtual thread para I/O intensivo (banco, API, disco)
+
+Use platform thread para CPU intensivo (calculo, processamento)
+
+Nunca use synchronized com operacoes lentas, prefira ReentrantLock
+
+Seu scheduler de 1h10 para cancelar pedidos e caso perfeito para virtual thread
