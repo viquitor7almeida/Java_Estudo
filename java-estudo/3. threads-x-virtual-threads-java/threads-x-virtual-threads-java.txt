@@ -95,7 +95,7 @@ Carrier (thread real que executa virtual thread): Stack no kernel (1MB), mas uma
 ***
 
 9. Codigo Pratico
-Criar uma virtual thread:
+-Criar uma virtual thread:
 Thread.startVirtualThread(() -> {
 fazerAlgo();
 });
@@ -103,6 +103,23 @@ fazerAlgo();
 ExecutorService para multiplas:
 ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 executor.submit(() -> fazerAlgo());
+
+-Usando em um controller do SpringBoot (Spring 3.1+ java 21+)
+
+// application.properties
+spring.threads.virtual.enabled=true
+
+@RestController
+public class UserController {
+
+    @PostMapping("/users")
+    public User createUser(@RequestBody User user) {
+        // Agora CADA requisição roda em uma Virtual Thread
+        // Em vez de prender thread do Tomcat por 200ms esperando banco
+        return userRepository.save(user);
+    }
+}
+
 
 ***
 
